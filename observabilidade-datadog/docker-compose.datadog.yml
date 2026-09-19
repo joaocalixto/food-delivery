@@ -1,0 +1,151 @@
+# Override de compose para a Aula 11 (observabilidade com Datadog).
+# Nao substitui o docker-compose.yml: soma a ele.
+#
+# Uso (na raiz do food-delivery/, com o .env preenchido):
+#   docker compose -f docker-compose.yml -f observabilidade-datadog/docker-compose.datadog.yml up -d --build
+#
+# Conferir o Agent:
+#   docker compose exec datadog-agent agent status
+
+# Bloco reutilizado em todos os servicos Java (tags unificadas + onde esta o Agent)
+x-dd-env: &dd-env
+  DD_ENV: aula
+  DD_VERSION: v2
+  DD_AGENT_HOST: datadog-agent          # nome do servico no compose = host na rede interna
+  DD_TRACE_AGENT_PORT: "8126"
+  DD_LOGS_INJECTION: "true"             # injeta dd.trace_id / dd.span_id no MDC dos logs
+  DD_TRACE_SAMPLE_RATE: "1"             # aula: 100% dos traces. Producao: baixar.
+  DD_PROFILING_ENABLED: "false"         # ligar so se quiser mostrar o profiler (custa mais)
+  DD_DOGSTATSD_PORT: "8125"
+  # Um unico tracer no host e compartilhado em modo somente-leitura por todos os servicos.
+  # Evita copiar o mesmo JAR para oito imagens Docker.
+  JAVA_TOOL_OPTIONS: "-javaagent:/opt/datadog/dd-java-agent.jar -XX:MaxRAMPercentage=65"
+
+services:
+  # ---------- Observabilidade ----------
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:7
+    pid: host                             # evita "process does not exist" no Agent 7.61+
+    environment:
+      DD_API_KEY: ${DD_API_KEY:?defina DD_API_KEY no .env}
+      DD_SITE: ${DD_SITE:-datadoghq.com}  # us5.datadoghq.com / datadoghq.eu conforme a conta
+      DD_ENV: aula
+      DD_HOSTNAME: food-delivery-local
+      # APM (traces vindos dos outros containers)
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      # Logs de TODOS os containers via docker.sock
+      DD_LOGS_ENABLED: "true"
+      DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL: "true"
+      # Metricas custom (DogStatsD) vindas dos outros containers
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+      # Plano B: OpenTelemetry (OTLP) direto no Agent
+      DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT: 0.0.0.0:4317
+      DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT: 0.0.0.0:4318
+      # Nao coletar os proprios logs do agent (ruido)
+      DD_CONTAINER_EXCLUDE: "name:datadog-agent"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup:/host/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - dd-agent-run:/opt/datadog-agent/run
+    ports:
+      - "8126:8126"   # so para debug local (curl no host); na rede interna nao precisa
+    mem_limit: 512m
+    restart: unless-stopped
+
+  # ---------- Servicos: tags + label de logs ----------
+  api-gateway:
+    environment:
+      <<: *dd-env
+      DD_SERVICE: api-gateway
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"java","service":"api-gateway"}]'
+    volumes:
+      - ./observabilidade-datadog/dd-java-agent.jar:/opt/datadog/dd-java-agent.jar:ro
+    depends_on:
+      - datadog-agent
+
+  restaurant-service:
+    environment:
+      <<: *dd-env
+      DD_SERVICE: restaurant-service
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"java","service":"restaurant-service"}]'
+    volumes:
+      - ./observabilidade-datadog/dd-java-agent.jar:/opt/datadog/dd-java-agent.jar:ro
+
+  order-service:
+    environment:
+      <<: *dd-env
+      DD_SERVICE: order-service
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"java","service":"order-service"}]'
+    volumes:
+      - ./observabilidade-datadog/dd-java-agent.jar:/opt/datadog/dd-java-agent.jar:ro
+
+  order-processor:
+    environment:
+      <<: *dd-env
+      DD_SERVICE: order-processor
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"java","service":"order-processor"}]'
+    volumes:
+      - ./observabilidade-datadog/dd-java-agent.jar:/opt/datadog/dd-java-agent.jar:ro
+
+  user-service:
+    environment:
+      <<: *dd-env
+      DD_SERVICE: user-service
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"java","service":"user-service"}]'
+    volumes:
+      - ./observabilidade-datadog/dd-java-agent.jar:/opt/datadog/dd-java-agent.jar:ro
+
+  payment-service:
+    environment:
+      <<: *dd-env
+      DD_SERVICE: payment-service
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"java","service":"payment-service"}]'
+    volumes:
+      - ./observabilidade-datadog/dd-java-agent.jar:/opt/datadog/dd-java-agent.jar:ro
+
+  delivery-service:
+    environment:
+      <<: *dd-env
+      DD_SERVICE: delivery-service
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"java","service":"delivery-service"}]'
+    volumes:
+      - ./observabilidade-datadog/dd-java-agent.jar:/opt/datadog/dd-java-agent.jar:ro
+
+  notification-service:
+    environment:
+      <<: *dd-env
+      DD_SERVICE: notification-service
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"java","service":"notification-service"}]'
+    volumes:
+      - ./observabilidade-datadog/dd-java-agent.jar:/opt/datadog/dd-java-agent.jar:ro
+
+  # Infra: so rotula a origem para o Datadog aplicar o parser certo nos logs
+  rabbitmq:
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"rabbitmq","service":"rabbitmq"}]'
+  redis:
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"redis","service":"redis"}]'
+  orders-db:
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"postgresql","service":"orders-db"}]'
+  restaurant-db:
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"postgresql","service":"restaurant-db"}]'
+  users-db:
+    labels:
+      com.datadoghq.ad.logs: '[{"source":"postgresql","service":"users-db"}]'
+
+volumes:
+  dd-agent-run:

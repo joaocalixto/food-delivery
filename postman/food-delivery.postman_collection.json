@@ -1,0 +1,208 @@
+{
+  "info": {
+    "name": "Food Delivery - Aula Beatriz",
+    "description": "Coleção da API do app de delivery. Todas as chamadas passam pelo API Gateway (porta 8080), que roteia para cada microsserviço. A pasta 'Health' usa as portas diretas de cada serviço (para o dashboard). Variáveis: baseUrl, token, userId, orderId, restaurantId.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "userId", "value": "", "type": "string" },
+    { "key": "orderId", "value": "", "type": "string" },
+    { "key": "restaurantId", "value": "1", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth (user-service)",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.code === 201);",
+                  "const b = pm.response.json();",
+                  "if (b.token) { pm.collectionVariables.set('token', b.token); }",
+                  "if (b.userId) { pm.collectionVariables.set('userId', b.userId); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"beatriz@cloudeflair.com\",\n  \"name\": \"Beatriz\",\n  \"password\": \"secret123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.code === 200);",
+                  "const b = pm.response.json();",
+                  "if (b.token) { pm.collectionVariables.set('token', b.token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"beatriz@cloudeflair.com\",\n  \"password\": \"secret123\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Restaurants (restaurant-service)",
+      "item": [
+        {
+          "name": "List restaurants",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/restaurants", "host": ["{{baseUrl}}"], "path": ["restaurants"] }
+          }
+        },
+        {
+          "name": "Search by cuisine",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/restaurants?cuisine=Italiana",
+              "host": ["{{baseUrl}}"],
+              "path": ["restaurants"],
+              "query": [ { "key": "cuisine", "value": "Italiana" } ]
+            }
+          }
+        },
+        {
+          "name": "Get restaurant by id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/restaurants/{{restaurantId}}", "host": ["{{baseUrl}}"], "path": ["restaurants", "{{restaurantId}}"] }
+          }
+        },
+        {
+          "name": "Get menu",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/restaurants/{{restaurantId}}/menu", "host": ["{{baseUrl}}"], "path": ["restaurants", "{{restaurantId}}", "menu"] }
+          }
+        },
+        {
+          "name": "Create restaurant",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/restaurants", "host": ["{{baseUrl}}"], "path": ["restaurants"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Cantina da Bia\",\n  \"cuisine\": \"Italiana\",\n  \"address\": \"Rua A, 100\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders (order-service)",
+      "item": [
+        {
+          "name": "Create order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.code === 201);",
+                  "const b = pm.response.json();",
+                  "if (b.id) { pm.collectionVariables.set('orderId', b.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": 1,\n  \"restaurantId\": 1,\n  \"items\": [\n    { \"name\": \"Margherita\", \"quantity\": 2, \"priceCents\": 4500 }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "List orders",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] }
+          }
+        },
+        {
+          "name": "Get order by id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments (payment-service)",
+      "item": [
+        {
+          "name": "Pay order",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": { "raw": "{{baseUrl}}/payments", "host": ["{{baseUrl}}"], "path": ["payments"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": {{orderId}},\n  \"amountCents\": 9000\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Deliveries (delivery-service)",
+      "item": [
+        {
+          "name": "List deliveries",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/deliveries", "host": ["{{baseUrl}}"], "path": ["deliveries"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health (portas diretas)",
+      "item": [
+        { "name": "api-gateway 8080",        "request": { "method": "GET", "url": { "raw": "http://localhost:8080/actuator/health", "host": ["localhost"], "port": "8080", "path": ["actuator","health"] } } },
+        { "name": "order-service 8081",       "request": { "method": "GET", "url": { "raw": "http://localhost:8081/actuator/health", "host": ["localhost"], "port": "8081", "path": ["actuator","health"] } } },
+        { "name": "restaurant-service 8082",  "request": { "method": "GET", "url": { "raw": "http://localhost:8082/actuator/health", "host": ["localhost"], "port": "8082", "path": ["actuator","health"] } } },
+        { "name": "order-processor 8083",     "request": { "method": "GET", "url": { "raw": "http://localhost:8083/actuator/health", "host": ["localhost"], "port": "8083", "path": ["actuator","health"] } } },
+        { "name": "user-service 8084",        "request": { "method": "GET", "url": { "raw": "http://localhost:8084/actuator/health", "host": ["localhost"], "port": "8084", "path": ["actuator","health"] } } },
+        { "name": "payment-service 8085",     "request": { "method": "GET", "url": { "raw": "http://localhost:8085/actuator/health", "host": ["localhost"], "port": "8085", "path": ["actuator","health"] } } },
+        { "name": "delivery-service 8086",    "request": { "method": "GET", "url": { "raw": "http://localhost:8086/actuator/health", "host": ["localhost"], "port": "8086", "path": ["actuator","health"] } } },
+        { "name": "notification-service 8087","request": { "method": "GET", "url": { "raw": "http://localhost:8087/actuator/health", "host": ["localhost"], "port": "8087", "path": ["actuator","health"] } } }
+      ]
+    }
+  ]
+}

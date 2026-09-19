@@ -1,0 +1,58 @@
+# =====================================================================
+# Stack COMPLETA e autossuficiente do restaurant-service.
+# Sobe: o servico (imagem do Docker Hub) + Postgres (com dados de exemplo) + Redis.
+#
+# Uso:   docker compose up
+# Requer: o arquivo db/init.sql ao lado (ja incluso no projeto).
+# Troque SEU_USUARIO pelo usuario do Docker Hub que publicou a imagem.
+# =====================================================================
+
+services:
+  restaurant-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: restaurants
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro   # popula no 1o boot
+      - restaurant-db-data:/var/lib/postgresql/data             # persiste os dados
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  restaurant-service:
+    image: SEU_USUARIO/restaurant-service:v2
+    # Alternativa sem imagem publicada (builda do codigo-fonte do monorepo):
+    # build:
+    #   context: ..
+    #   dockerfile: restaurant-service/Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      DB_HOST: restaurant-db
+      DB_PORT: 5432
+      DB_NAME: restaurants
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      restaurant-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  restaurant-db-data:

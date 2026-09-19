@@ -1,0 +1,30 @@
+# Trecho para adicionar ao application.yml de cada servico Java (Aula 11 - Passo 3).
+#
+# Logs em JSON (uma linha por evento, com campos):
+#  - o Datadog vira facetas automaticas: level -> status, logger_name, message, thread_name
+#  - o MDC entra no JSON, entao dd.trace_id / dd.span_id (DD_LOGS_INJECTION=true) correlacionam
+#    log <-> trace sem configurar nada
+#  - stacktrace fica num campo so (nao vira 40 linhas separadas)
+#
+# Formato "logstash" e nativo do Spring Boot (>= 3.4). Alternativa: "ecs".
+
+logging:
+  structured:
+    format:
+      console: logstash
+
+# Mantem o que ja existia nas aulas anteriores (health para o dashboard da Aula 9)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+      cors:
+        allowed-origins: "*"
+        allowed-methods: GET
+  endpoint:
+    health:
+      show-details: always
+
+# Dica de aula: para ver a diferenca, suba UM servico sem a chave "logging.structured" e outro
+# com, provoque um erro (docker compose stop rabbitmq + POST /orders) e compare no Logs Explorer.

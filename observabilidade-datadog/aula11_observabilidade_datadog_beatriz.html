@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aula 11 · Observabilidade com Datadog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --navy: #0F1424; --navy-2: #1A2036;
+    --paper: #FFFFFF; --card: #F4F2FA; --card-2: #EDE7F7;
+    --purple: #632CA6; --purple-soft: #B79CE0; --purple-ghost: #E3D9F5;
+    --ink: #1B1F2E; --muted: #5B6478; --line: #E0DCEB;
+    --on-dark: #FFFFFF; --on-dark-2: #B8BDD0; --on-dark-3: #8A90A6;
+    --green: #1B9E77; --green-bg: #E6F4EE;
+    --amber: #E08A00; --amber-bg: #FDF1E3;
+    --red: #D0342C; --red-bg: #FBEAE8;
+    --display: "Sora", "Segoe UI", system-ui, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--navy); color: var(--ink);
+    font-family: var(--body); font-size: 18px; line-height: 1.45;
+    overflow: hidden; -webkit-font-smoothing: antialiased;
+  }
+  /* ---------- palco ---------- */
+  #viewport { position: fixed; inset: 0; padding: 16px 16px 64px; display: grid; place-items: center; }
+  #stage {
+    width: 1280px; height: 720px; position: relative; flex: none;
+    transform-origin: center center; box-shadow: 0 30px 80px rgba(0,0,0,.45); border-radius: 6px; overflow: hidden;
+  }
+  .slide {
+    position: absolute; inset: 0; padding: 56px 64px 48px; display: none; flex-direction: column;
+    background: var(--paper); color: var(--ink);
+  }
+  .slide.is-active { display: flex; }
+  .slide.dark { background: var(--navy); color: var(--on-dark); }
+  .slide h1, .slide h2 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+  .slide h2 { font-size: 40px; font-weight: 700; line-height: 1.15; }
+  .slide h1 { font-size: 52px; font-weight: 700; line-height: 1.12; }
+  .kicker {
+    font: 600 12px/1 var(--body); letter-spacing: .28em; text-transform: uppercase; color: var(--purple); margin-bottom: 14px;
+  }
+  .dark .kicker { color: var(--purple-soft); }
+  .lead { font-size: 19px; color: var(--muted); margin: 14px 0 0; max-width: 70ch; }
+  .dark .lead { color: var(--on-dark-2); }
+  .body { flex: 1; margin-top: 30px; min-height: 0; }
+  .foot {
+    display: flex; justify-content: space-between; font-size: 12px; color: #9AA0B4; margin-top: auto; padding-top: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .dark .foot { color: var(--on-dark-3); }
+
+  /* ---------- componentes ---------- */
+  .cols { display: grid; gap: 24px; height: 100%; }
+  .cols-2 { grid-template-columns: 1fr 1fr; }
+  .cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .card { background: var(--card); border-radius: 10px; padding: 22px 24px; }
+  .card.tint { background: var(--card-2); }
+  .card.warm { background: var(--amber-bg); }
+  .card.good { background: var(--green-bg); }
+  .card.bad { background: var(--red-bg); }
+  .card h3 { font-family: var(--display); font-size: 19px; font-weight: 600; margin: 0 0 10px; line-height: 1.3; }
+  .card p { margin: 0 0 10px; color: var(--muted); font-size: 16px; }
+  .card p:last-child { margin-bottom: 0; }
+  .num { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--purple); color: #fff; font: 600 15px var(--display); flex: none; }
+  .head-num { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .head-num h3 { margin: 0; }
+  .label { font: 600 11px/1 var(--body); letter-spacing: .22em; text-transform: uppercase; margin: 0 0 8px; }
+  ol.steps, ul.list { margin: 0; padding-left: 26px; font-size: 17px; }
+  ol.steps li, ul.list li { margin-bottom: 10px; padding-left: 4px; }
+  ol.steps li::marker { color: var(--purple); font-weight: 600; }
+  ul.list li::marker { color: var(--purple); }
+  .dark ol.steps li::marker { color: var(--purple-soft); }
+  .ans { color: var(--purple); font-weight: 500; }
+  pre.code {
+    margin: 0; background: var(--navy); color: #E8E6F0; border-radius: 8px; padding: 18px 20px;
+    font: 14px/1.55 var(--mono); overflow-x: auto; white-space: pre;
+  }
+  pre.code .c { color: var(--on-dark-3); }
+  .callout { display: flex; align-items: center; gap: 14px; border-radius: 8px; padding: 12px 16px; font-size: 16px; }
+  .callout .dot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; flex: none; }
+  .callout.ok { background: var(--green-bg); } .callout.ok .dot { background: var(--green); } .callout.ok b { color: var(--green); }
+  .callout.warn { background: var(--amber-bg); } .callout.warn .dot { background: var(--amber); } .callout.warn b { color: var(--amber); }
+  .aside { font-style: italic; color: var(--purple); font-size: 16px; margin: 0; }
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .flow { display: flex; align-items: stretch; gap: 8px; }
+  .flow .box { flex: 1; border-radius: 8px; padding: 12px 10px; color: #fff; text-align: center; display: grid; place-items: center; font-size: 13px; line-height: 1.3; }
+  .flow .arrow { align-self: center; color: var(--purple-soft); font-size: 22px; flex: none; }
+  .flow .box small { display: block; font: 12px var(--mono); opacity: .8; margin-bottom: 4px; }
+  .flow .box code { font: 500 13px var(--mono); }
+  .bg-purple { background: var(--purple); } .bg-amber { background: var(--amber); } .bg-green { background: var(--green); }
+  .bg-red { background: var(--red); } .bg-slate { background: #4A5470; } .bg-navy { background: var(--navy); }
+  table.rubric { width: 100%; border-collapse: collapse; font-size: 15px; }
+  table.rubric th { background: var(--purple); color: #fff; text-align: left; padding: 10px 12px; font-family: var(--display); font-weight: 600; font-size: 14px; }
+  table.rubric td { border-bottom: 1px solid var(--line); padding: 10px 12px; vertical-align: top; }
+  table.rubric td:last-child, table.rubric th:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .agenda { display: grid; grid-template-columns: 44px 210px 1fr; column-gap: 22px; row-gap: 22px; align-items: center; margin-top: 34px; }
+  .agenda .t { font: 600 12px var(--body); color: var(--purple-soft); letter-spacing: .06em; }
+  .agenda .n { font-family: var(--display); font-size: 22px; font-weight: 600; }
+  .agenda .d { color: var(--on-dark-2); font-size: 16px; }
+  .meta { color: var(--on-dark-3); font-size: 15px; margin-top: 40px; }
+  .meta b { color: var(--on-dark); font-weight: 600; }
+
+  /* ---------- chrome ---------- */
+  #hud {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
+    background: rgba(26,32,54,.85); color: var(--on-dark-2); border: 1px solid rgba(255,255,255,.08); border-radius: 999px;
+    padding: 6px 8px; font-size: 13px; z-index: 5; backdrop-filter: blur(6px);
+  }
+  #hud button { background: transparent; color: inherit; border: 0; font: inherit; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+  #hud button:hover, #hud button:focus-visible { background: rgba(255,255,255,.1); color: #fff; outline: 2px solid var(--purple-soft); outline-offset: -2px; }
+  #hud .count { font-variant-numeric: tabular-nums; padding: 0 6px; min-width: 64px; text-align: center; }
+  #progress { position: fixed; left: 0; top: 0; height: 3px; background: var(--purple-soft); width: 0; z-index: 6; transition: width .25s; }
+  #notes {
+    position: fixed; right: 16px; top: 16px; width: min(380px, calc(100vw - 32px)); max-height: 60vh; overflow: auto; z-index: 5;
+    background: #fff; color: var(--ink); border-radius: 10px; padding: 16px 18px; box-shadow: 0 20px 60px rgba(0,0,0,.4); font-size: 15px;
+  }
+  #notes .label { color: var(--purple); }
+  #notes[hidden] { display: none; }
+  #help { position: fixed; left: 16px; bottom: 16px; color: var(--on-dark-3); font-size: 12px; z-index: 5; }
+  @media (max-width: 700px) { #help { display: none; } }
+  @media (prefers-reduced-motion: reduce) { #progress { transition: none; } }
+
+  /* ---------- impressão: um slide por página ---------- */
+  @media print {
+    body { overflow: visible; background: #fff; }
+    #viewport { position: static; display: block; padding: 0; }
+    #stage { transform: none !important; width: 1280px; height: 720px; box-shadow: none; border-radius: 0; overflow: visible; page-break-after: always; }
+    #stage { display: block; height: auto; }
+    .slide { position: relative; display: flex !important; width: 1280px; height: 720px; page-break-after: always; break-after: page; }
+    #hud, #progress, #notes, #help { display: none !important; }
+    @page { size: 1280px 720px; margin: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div id="viewport">
+<div id="stage">
+
+<!-- 1 · Capa -->
+<section class="slide dark" data-notes="Abrir com a pergunta: o dashboard da Aula 9 responde 'está de pé?'. Hoje a pergunta muda. Criar a conta Datadog ANTES da aula (trial 14 dias).">
+  <div style="margin-top:80px">
+    <p class="kicker">Aula 11 · Food Delivery · Observabilidade</p>
+    <h1>Do “está de pé?” ao<br>“o que aconteceu com o pedido 42?”</h1>
+    <p class="lead" style="font-size:21px;max-width:60ch;margin-top:26px">Métricas, logs e traces com Datadog em cima da stack que você já publicou e roda: Agent, APM, DogStatsD e monitores — e um incidente de propósito para ver tudo funcionando.</p>
+    <p class="meta">Para: <b>Beatriz</b> &nbsp;•&nbsp; Duração: <b>~110 min</b> &nbsp;•&nbsp; Pré-requisito: <b>stack food-delivery rodando + conta Datadog (trial)</b></p>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 2 · Agenda -->
+<section class="slide dark">
+  <p class="kicker">Agenda</p>
+  <h2>Os próximos 110 minutos</h2>
+  <div class="agenda">
+    <span class="num">1</span><div><div class="t">15 MIN</div><div class="n">Revisão</div></div><div class="d">Onde paramos na Aula 10 e o gap que o dashboard de health deixa.</div>
+    <span class="num">2</span><div><div class="t">25 MIN</div><div class="n">Conceitos</div></div><div class="d">Monitoramento × observabilidade, os três pilares, como o Datadog encaixa, RED e cardinalidade.</div>
+    <span class="num">3</span><div><div class="t">50 MIN</div><div class="n">Mãos à obra</div></div><div class="d">5 passos: conta e Agent → logs → APM (trace atravessando a fila) → métrica + monitor → quebrar de propósito.</div>
+    <span class="num">4</span><div><div class="t">DURANTE A PRÁTICA</div><div class="n">Exercícios</div></div><div class="d">Para ela fazer sozinha: gargalo no trace, cache visível, filtro de log, dashboard RED.</div>
+    <span class="num">5</span><div><div class="t">20 MIN</div><div class="n">Fechamento</div></div><div class="d">Perguntas para verbalizar, tarefa da semana, rubrica e a ponte para a próxima aula.</div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 3 · Revisão -->
+<section class="slide" data-notes="Deixe ela responder. As respostas em roxo são o gabarito. Esse gap é a aula de hoje.">
+  <p class="kicker">Revisão · 15 min</p>
+  <h2>Onde paramos: Aula 10 — publicar e operar</h2>
+  <p class="lead">Na última aula a stack deixou de ser “só na minha máquina”. O que você fez:</p>
+  <div class="body stack">
+    <div class="cols cols-3" style="height:auto">
+      <div class="card"><div class="head-num"><span class="num">1</span><h3>Publicou no Docker Hub</h3></div><p>restaurant-service:v2 com build multi-arch (amd64 + arm64). A v1 tinha o bug de LazyInitialization em /restaurants; a v2 corrige.</p></div>
+      <div class="card"><div class="head-num"><span class="num">2</span><h3>Documentou a imagem</h3></div><p>Overview do Docker Hub (DOCKERHUB.md) deixando claro: a imagem não funciona sozinha — precisa de Postgres + Redis, e o compose completo vai junto.</p></div>
+      <div class="card"><div class="head-num"><span class="num">3</span><h3>Puxou e rodou sem código</h3></div><p>Em outra pasta, só com docker-compose.yml + init.sql (PULL-E-RODAR.md). /actuator/health DOWN quando faltava dependência.</p></div>
+    </div>
+    <div>
+      <p class="label" style="color:var(--purple)">Checkpoint de abertura — pergunte antes de começar</p>
+      <ul class="list" style="font-size:16px">
+        <li>O dashboard da Aula 9 lê o /actuator/health a cada 3 s. Que pergunta ele responde? <span class="ans">→ está de pé.</span></li>
+        <li>Que pergunta ele NÃO responde? <span class="ans">→ por que o POST /orders demorou 4 s ontem às 19h? quantos pedidos falharam? qual serviço da cadeia quebrou?</span></li>
+        <li>Se o notification-service cair, o cliente percebe? Como você ficaria sabendo? <span class="ans">→ hoje: só olhando o log. Ninguém te avisa.</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 4 · O gap -->
+<section class="slide">
+  <p class="kicker">O gap</p>
+  <h2>O que o dashboard caseiro responde — e o que não responde</h2>
+  <div class="body cols cols-2">
+    <div class="card good">
+      <p class="label" style="color:var(--green)">Responde (Aula 9)</p>
+      <ul class="list" style="font-size:18px">
+        <li>O serviço está UP ou DOWN agora?</li>
+        <li>Qual dependência (Postgres, Redis, RabbitMQ) o serviço acusa como DOWN?</li>
+        <li>Se eu parar um container, o card fica vermelho em ~3 s.</li>
+      </ul>
+    </div>
+    <div class="card bad">
+      <p class="label" style="color:var(--red)">Não responde</p>
+      <ul class="list" style="font-size:18px">
+        <li>Por que o POST /orders demorou 4 s ontem às 19h?</li>
+        <li>Quantos pedidos falharam na última hora? Para qual restaurante?</li>
+        <li>Em qual dos 5 serviços da cadeia o pedido 42 travou?</li>
+        <li>Quem te avisa às 3h da manhã?</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 5 · Seção -->
+<section class="slide dark">
+  <div style="margin-top:200px">
+    <p class="kicker">Parte 1 · 25 min</p>
+    <h1 style="font-size:64px">Conceitos.</h1>
+    <p class="lead" style="font-size:20px">Monitoramento × observabilidade, os três pilares, o que amarra os três, e como o Datadog se encaixa na stack.</p>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 6 · Monitoramento x Observabilidade -->
+<section class="slide">
+  <p class="kicker">Conceito 1</p>
+  <h2>Monitoramento × Observabilidade</h2>
+  <div class="body stack">
+    <div class="cols cols-2" style="height:auto">
+      <div class="card" style="padding:30px"><h3 style="font-size:24px">Monitoramento</h3><p style="font-size:18px">Responde perguntas que você já sabia fazer antes: “CPU &gt; 80%?”, “health UP?”.</p><p style="font-size:18px">É o dashboard da Aula 9. Útil, mas só enxerga o que alguém previu.</p></div>
+      <div class="card tint" style="padding:30px"><h3 style="font-size:24px">Observabilidade</h3><p style="font-size:18px">Conseguir responder perguntas <b>novas</b> sobre o sistema só olhando o que ele emite — sem debugger, sem docker exec.</p><p style="font-size:18px">“Os pedidos do restaurante 3 estão mais lentos que os outros?” Ninguém previu a pergunta; os dados permitem responder.</p></div>
+    </div>
+    <p class="aside" style="font-size:19px">Regra de bolso: se para responder você precisa entrar no container, o sistema não é observável.</p>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 7 · Três pilares -->
+<section class="slide">
+  <p class="kicker">Conceito 2</p>
+  <h2>Os três pilares — e a pergunta que cada um responde</h2>
+  <div class="body cols cols-3">
+    <div class="card">
+      <div class="head-num"><span class="num">M</span><h3 style="font-size:24px">Métricas</h3></div>
+      <p>Números agregados no tempo: contador, gauge, histograma.</p>
+      <p class="label" style="color:var(--purple);margin-top:18px">Responde</p><p style="color:var(--ink);font-weight:600">Quanto? Com que frequência? Tendência?</p>
+      <p class="label" style="color:var(--purple);margin-top:18px">No food delivery</p><p>pedidos/min · p95 do POST /orders · tamanho da fila</p>
+    </div>
+    <div class="card">
+      <div class="head-num"><span class="num" style="background:var(--green)">L</span><h3 style="font-size:24px">Logs</h3></div>
+      <p>Eventos discretos, com contexto.</p>
+      <p class="label" style="color:var(--green);margin-top:18px">Responde</p><p style="color:var(--ink);font-weight:600">O que aconteceu exatamente naquele momento?</p>
+      <p class="label" style="color:var(--green);margin-top:18px">No food delivery</p><p>“Pedido 42 criado” · stacktrace do AmqpConnectException</p>
+    </div>
+    <div class="card">
+      <div class="head-num"><span class="num" style="background:var(--amber)">T</span><h3 style="font-size:24px">Traces</h3></div>
+      <p>O caminho de <b>uma</b> requisição atravessando vários serviços (spans).</p>
+      <p class="label" style="color:var(--amber);margin-top:18px">Responde</p><p style="color:var(--ink);font-weight:600">Onde o tempo foi gasto? Qual serviço quebrou a cadeia?</p>
+      <p class="label" style="color:var(--amber);margin-top:18px">No food delivery</p><p>gateway → order-service → Postgres → RabbitMQ → processor / delivery / notification</p>
+    </div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 8 · O que amarra tudo -->
+<section class="slide">
+  <p class="kicker">Conceito 3</p>
+  <h2>O que amarra os três: tags unificadas + trace_id</h2>
+  <p class="lead">Três ferramentas separadas não são observabilidade. Correlação é: de uma métrica com pico você cai nos traces lentos; de um trace você cai nos logs daquela requisição.</p>
+  <div class="body stack" style="margin-top:22px">
+    <div class="flow" style="gap:16px">
+      <div class="card" style="flex:1"><h3 style="color:var(--purple)">Métrica</h3><p>pico de erros em order-service</p></div>
+      <span class="arrow">➜</span>
+      <div class="card" style="flex:1"><h3 style="color:var(--amber)">Trace</h3><p>os POST /orders vermelhos daquele minuto</p></div>
+      <span class="arrow">➜</span>
+      <div class="card" style="flex:1"><h3 style="color:var(--green)">Log</h3><p>AmqpConnectException com o mesmo dd.trace_id</p></div>
+    </div>
+    <p style="margin:6px 0 0;font-weight:600">Sem isso não funciona:</p>
+    <div class="cols cols-2" style="height:auto">
+      <div class="card"><h3>Tags unificadas em tudo</h3><p><code style="font-family:var(--mono)">env · service · version</code> em cada métrica, log e trace. No compose: DD_ENV=aula, DD_SERVICE=order-service, DD_VERSION=v2.</p></div>
+      <div class="card"><h3>trace_id injetado no log</h3><p>DD_LOGS_INJECTION=true põe dd.trace_id / dd.span_id no MDC. Com log em JSON, o Datadog liga log ↔ trace sozinho.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 9 · Arquitetura -->
+<section class="slide" data-notes="Pergunta condutora do curso: qual dos três problemas (escala, desacoplamento, dado especial) o Datadog resolve? Nenhum diretamente — ele resolve o quarto problema que aparece com >3 serviços: ninguém mais consegue VER o sistema inteiro.">
+  <p class="kicker">Conceito 4</p>
+  <h2>Como o Datadog encaixa na nossa stack</h2>
+  <div class="body" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 40px;align-content:start;margin-top:20px">
+    <div style="grid-column:1/-1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 20px 16px">
+      <p class="label" style="color:var(--muted)">Rede do Docker Compose</p>
+      <div class="flow" style="gap:10px">
+        <div class="box" style="background:#fff;color:var(--ink);border:1px solid var(--line)"><code>api-gateway</code></div>
+        <div class="box" style="background:#fff;color:var(--ink);border:1px solid var(--line)"><code>order-service</code></div>
+        <div class="box" style="background:#fff;color:var(--ink);border:1px solid var(--line)"><code>order-processor</code></div>
+        <div class="box" style="background:#fff;color:var(--ink);border:1px solid var(--line)"><code>delivery</code></div>
+        <div class="box" style="background:#fff;color:var(--ink);border:1px solid var(--line)"><code>notification</code></div>
+        <div class="box" style="background:#fff;color:var(--ink);border:1px solid var(--line)"><code>restaurant</code></div>
+        <div class="box" style="background:#fff;color:var(--ink);border:1px solid var(--line)"><code>payment</code></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:10px 0 8px;text-align:center;font-size:14px">
+        <div><b style="color:var(--green)">logs (stdout)</b> <span style="color:var(--muted)">via docker.sock</span> <div style="color:var(--green);font-size:22px;line-height:1">↓</div></div>
+        <div><b style="color:var(--amber)">traces → :8126</b> <span style="color:var(--muted)">dd-java-agent</span> <div style="color:var(--amber);font-size:22px;line-height:1">↓</div></div>
+        <div><b style="color:var(--purple)">métricas → :8125/udp</b> <span style="color:var(--muted)">DogStatsD</span> <div style="color:var(--purple);font-size:22px;line-height:1">↓</div></div>
+      </div>
+      <div style="background:var(--purple);color:#fff;border-radius:8px;padding:10px 14px;text-align:center;max-width:620px;margin:0 auto">
+        <div style="font:600 20px var(--display)">datadog-agent</div>
+        <div style="font-size:14px;opacity:.9">1 container “sidecar” da stack · a única peça que conhece a DD_API_KEY</div>
+      </div>
+      <div style="text-align:center;color:var(--muted);font-size:13px;margin:4px 0"><span style="color:var(--purple-soft);font-size:22px;line-height:1;display:block">↓</span>HTTPS · DD_API_KEY · DD_SITE</div>
+      <div style="background:var(--navy);color:#fff;border-radius:8px;padding:12px;text-align:center;max-width:620px;margin:0 auto;font:600 16px var(--display)">Datadog SaaS · APM · Logs · Metrics · Monitors</div>
+    </div>
+    <div style="font-size:14px;max-width:60ch"><b>dd-java-agent.jar</b> — <span style="color:var(--muted)">-javaagent na JVM. Sem mudar código gera spans de HTTP, JDBC, Redis, RabbitMQ — e propaga o contexto nos headers AMQP: o trace atravessa a fila.</span></div>
+    <div style="font-size:14px;max-width:60ch"><b>DogStatsD</b> — <span style="color:var(--muted)">UDP simples para métricas de negócio que o auto-instrument não sabe: orders.created por restaurante.</span></div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 10 · Vocabulário -->
+<section class="slide">
+  <p class="kicker">Conceito 5</p>
+  <h2>Vocabulário para a prática</h2>
+  <div class="body cols cols-2" style="grid-template-rows:1fr 1fr">
+    <div class="card"><h3>RED — Rate, Errors, Duration</h3><p style="font-size:17px">As três métricas que todo serviço HTTP precisa ter num dashboard. O APM do Datadog gera as três sozinho para cada serviço.</p></div>
+    <div class="card"><h3>Monitor = alerta</h3><p style="font-size:17px">Uma condição sobre métrica, log ou trace que notifica alguém. “Error rate do order-service &gt; 5% por 5 min → e-mail.”</p></div>
+    <div class="card"><h3>SLO</h3><p style="font-size:17px">Objetivo sobre uma métrica: “99% dos POST /orders em &lt; 500 ms no mês”. O que sobra é o error budget.</p></div>
+    <div class="card warm"><h3>Cardinalidade</h3><p style="font-size:17px">Tag restaurant_id (dezenas de valores) é ok. Tag order_id (infinito) em métrica é o erro clássico — vira custo e lentidão. Isso vai em log/trace.</p></div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 11 · Seção -->
+<section class="slide dark">
+  <div style="margin-top:200px">
+    <p class="kicker">Parte 2 · 50 min</p>
+    <h1 style="font-size:64px">Mãos à obra.</h1>
+    <p class="lead" style="font-size:20px;max-width:70ch">Cinco passos. Você digita, eu guio. Cada passo tem um checkpoint visível no Datadog antes de avançar — se travar, o problema quase sempre é DD_SITE ou DD_API_KEY.</p>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 12 · Passo 1 -->
+<section class="slide">
+  <p class="kicker">Passo 1 · 5 min</p>
+  <h2>Conta, API key e .env</h2>
+  <div class="body stack">
+    <div class="cols cols-2" style="height:auto;grid-template-columns:1.1fr 1fr">
+      <ol class="steps">
+        <li>Criar conta em datadoghq.com (trial 14 dias). Anotar o site — aparece na URL após o login.</li>
+        <li>Organization Settings → API Keys → New Key. Copiar.</li>
+        <li>Na raiz do food-delivery/: copiar .env.example para .env e preencher.</li>
+        <li>Conferir que .env está no .gitignore. A chave nunca vai para o Git.</li>
+      </ol>
+<pre class="code"><span class="c"># .env (raiz do food-delivery/)</span>
+DD_API_KEY=cole_sua_api_key_aqui
+
+<span class="c"># tem que bater com a URL da conta:
+#  app.datadoghq.com     -&gt; datadoghq.com
+#  app.us5.datadoghq.com -&gt; us5.datadoghq.com
+#  app.datadoghq.eu      -&gt; datadoghq.eu</span>
+DD_SITE=datadoghq.com</pre>
+    </div>
+    <div class="callout ok"><span class="dot">✓</span><span><b>Checkpoint</b> &nbsp;cat .env mostra a chave; git status <b style="color:var(--ink)">não</b> mostra o .env.</span></div>
+    <div class="callout warn"><span class="dot">!</span><span><b>Armadilha</b> &nbsp;DD_SITE errado é o erro nº 1 de quem começa: o Agent diz “API Key invalid” ou os dados simplesmente somem.</span></div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 13 · Passo 2 -->
+<section class="slide">
+  <p class="kicker">Passo 2 · 10 min</p>
+  <h2>Subir o Agent — sem mexer no compose da Aula 10</h2>
+  <p class="lead">Usamos um override de compose (docker-compose.datadog.yml): soma ao docker-compose.yml, não substitui.</p>
+  <div class="body" style="display:grid;grid-template-columns:1.3fr 1fr;gap:24px;margin-top:22px">
+    <div class="stack">
+<pre class="code">docker compose -f docker-compose.yml \
+  -f observabilidade-datadog/docker-compose.datadog.yml \
+  up -d datadog-agent
+
+docker compose exec datadog-agent agent status | head -60</pre>
+      <div>
+        <p style="margin:0 0 6px;font-weight:600">O que o override liga no Agent:</p>
+        <div style="font-size:14px;display:grid;grid-template-columns:auto 1fr;column-gap:14px;row-gap:4px">
+          <code style="font-family:var(--mono);color:var(--purple)">DD_APM_ENABLED + DD_APM_NON_LOCAL_TRAFFIC</code><span style="color:var(--muted)">recebe traces dos outros containers</span>
+          <code style="font-family:var(--mono);color:var(--purple)">DD_LOGS_ENABLED + CONTAINER_COLLECT_ALL</code><span style="color:var(--muted)">lê os logs de todos os containers pelo docker.sock</span>
+          <code style="font-family:var(--mono);color:var(--purple)">DD_DOGSTATSD_NON_LOCAL_TRAFFIC</code><span style="color:var(--muted)">recebe métricas custom dos outros containers</span>
+        </div>
+      </div>
+      <p class="aside">Mini-exercício: docker compose stop redis → o container some da lista em ~1 min. Religar.</p>
+    </div>
+    <div class="stack">
+      <div>
+        <p style="margin:0 0 6px;font-weight:600">O que ler no agent status, com ela:</p>
+        <ul class="list" style="font-size:15px">
+          <li>API Keys status → “API Key valid”</li>
+          <li>Logs Agent → ligado</li>
+          <li>APM Agent → Receiver: 0.0.0.0:8126</li>
+          <li>DogStatsD → :8125/udp</li>
+        </ul>
+      </div>
+      <div class="callout ok"><span class="dot">✓</span><span><b>Checkpoint</b> &nbsp;Infrastructure → Containers lista restaurant-service, order-service, rabbitmq, redis… com CPU/memória ao vivo.</span></div>
+    </div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 14 · Passo 3 -->
+<section class="slide">
+  <p class="kicker">Passo 3 · 10 min</p>
+  <h2>Logs centralizados — o fan-out numa tela só</h2>
+  <div class="body" style="display:grid;grid-template-columns:1.1fr 1fr;gap:28px">
+    <div class="stack">
+      <ol class="steps">
+        <li>Subir a stack toda com o override (up -d --build).</li>
+        <li>Gerar tráfego pelo Postman: Register → List restaurants → Create order → Pay → List deliveries.</li>
+        <li>Logs → Explorer, filtro <code style="font-family:var(--mono)">service:order-service</code>. Depois <code style="font-family:var(--mono)">service:(order-processor OR delivery-service OR notification-service)</code>.</li>
+        <li>O <b>mesmo</b> pedido aparece nos três — é o fan-out da Aula 5/6, agora numa timeline só.</li>
+      </ol>
+      <div class="callout ok"><span class="dot">✓</span><span><b>Checkpoint</b> &nbsp;O log order.created de um POST /orders aparece em 4 serviços na mesma timeline.</span></div>
+    </div>
+    <div class="card tint stack" style="gap:12px">
+      <h3 style="color:var(--purple);font-size:21px;margin:0">Melhoria imediata: logs em JSON</h3>
+      <p>Log em texto quebra o stacktrace em 40 linhas e não tem campos. Uma linha no application.yml resolve:</p>
+<pre class="code" style="font-size:13px">logging:
+  structured:
+    format:
+      console: logstash</pre>
+      <p style="color:var(--ink)">Rebuild, novo tráfego, e agora level, logger_name e message viram facetas filtráveis. Filtre status:error. O MDC (dd.trace_id) entra no JSON de graça.</p>
+      <p class="aside" style="font-size:14px">Dica de aula: um serviço sem, outro com — provoque um erro e compare no Explorer.</p>
+    </div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 15 · Passo 4 -->
+<section class="slide">
+  <p class="kicker">Passo 4 · 15 min · o pulo do gato</p>
+  <h2>APM: um trace atravessando a fila</h2>
+  <p class="lead" style="font-size:16px">Uma única cópia do tracer é montada nos serviços por volume. O override injeta JAVA_TOOL_OPTIONS, DD_SERVICE, DD_ENV, DD_VERSION, DD_AGENT_HOST e DD_LOGS_INJECTION.</p>
+  <div class="body stack" style="margin-top:20px">
+    <div>
+      <div class="flow">
+        <div class="box bg-slate"><div><small>api-gateway</small><code>http.request</code></div></div><span class="arrow">➜</span>
+        <div class="box bg-purple"><div><small>order-service</small><code>servlet.request</code></div></div><span class="arrow">➜</span>
+        <div class="box bg-purple"><div><small>order-service</small><code>postgresql.query INSERT</code></div></div><span class="arrow">➜</span>
+        <div class="box bg-purple"><div><small>order-service</small><code>amqp.command publish</code></div></div><span class="arrow">➜</span>
+        <div class="box bg-amber"><div><small>order-processor</small><code>amqp.command consume</code></div></div>
+      </div>
+      <p style="text-align:center;color:var(--muted);font-size:13px;font-style:italic;margin:8px 0 0">um único trace_id · o contexto viaja nos headers AMQP</p>
+    </div>
+    <div class="cols cols-2" style="height:auto;grid-template-columns:1.1fr 1fr">
+      <ol class="steps" style="font-size:15px">
+        <li>Rebuild + uns 10 POST /orders pelo Postman.</li>
+        <li>APM → Services: order-service com Requests, Errors, Latency (RED) já preenchidos.</li>
+        <li>Abrir um trace do POST /orders e ler os spans acima.</li>
+        <li>APM → Service Map: o system design das aulas 4–8 desenhado sozinho a partir do tráfego real.</li>
+        <li>Clicar num span → aba Logs: os logs daquele pedido, com dd.trace_id.</li>
+      </ol>
+      <div class="stack">
+        <div class="callout ok"><span class="dot">✓</span><span><b>Checkpoint</b> &nbsp;Um único trace com spans em ≥ 2 serviços; Service Map mostrando order-service → rabbitmq → order-processor.</span></div>
+        <p class="aside" style="font-size:15px">Compare o Service Map com o diagrama que vocês desenharam à mão nas aulas de system design.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 16 · Boot 4 / Plano B -->
+<section class="slide">
+  <p class="kicker">Passo 4 · atenção</p>
+  <h2>Spring Boot 4 é novo demais — tenha o Plano B pronto</h2>
+  <div class="body stack">
+    <div class="cols cols-2" style="height:auto">
+      <div class="card" style="padding:28px"><h3 style="font-size:21px">Plano A — dd-java-agent (auto-instrumentação)</h3><p style="font-size:17px">A matriz oficial do tracer lista Spring Boot até 3.x.</p><p style="font-size:17px">Na prática HTTP (Tomcat/servlet), JDBC, Lettuce e AMQP costumam instrumentar normalmente — são camadas abaixo do Boot.</p><p style="font-size:17px">Teste antes da aula. Se algum span faltar, vá para o Plano B sem drama.</p></div>
+      <div class="card tint" style="padding:28px"><h3 style="font-size:21px">Plano B — OpenTelemetry nativo do Boot</h3><p style="font-size:17px">starter <code style="font-family:var(--mono);font-size:15px">spring-boot-starter-opentelemetry</code> (nativo do Boot 4).</p><p style="font-size:17px">O app exporta para o Agent:<br><code style="font-family:var(--mono);font-size:15px">management.opentelemetry.tracing.export.otlp.endpoint=http://datadog-agent:4318/v1/traces</code></p><p style="font-size:17px">O override já abre 4317/4318 no Agent (DD_OTLP_CONFIG_RECEIVER_*).</p></div>
+    </div>
+    <p class="aside" style="font-size:18px">Bônus didático: ensinar os dois caminhos — “instrumentação automática por agente” × “OpenTelemetry (padrão aberto)”.</p>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 17 · Passo 5 -->
+<section class="slide">
+  <p class="kicker">Passo 5 · 10 min</p>
+  <h2>Métrica de negócio, monitor — e quebrar de propósito</h2>
+  <div class="body stack" style="gap:20px">
+    <div class="cols cols-2" style="height:auto;grid-template-columns:1fr 1fr">
+      <ol class="steps" style="font-size:16px">
+        <li>OrderMetrics.java no order-service (java-dogstatsd-client) e metrics.orderCreated(restaurantId) no placeOrder. Rebuild.</li>
+        <li>5 pedidos para restaurantes diferentes → Metrics Explorer: orders.created, sum by restaurant_id.</li>
+        <li>Monitors → New → APM: order-service, error rate &gt; 5% nos últimos 5 min, notificar o e-mail dela.</li>
+      </ol>
+<pre class="code" style="font-size:13px">statsd.incrementCounter("orders.created",
+        "restaurant_id:" + restaurantId);
+
+<span class="c"># tag restaurant_id ok · order_id NUNCA (cardinalidade)</span></pre>
+    </div>
+    <div>
+      <p class="label" style="color:var(--red)">O incidente</p>
+      <div class="flow">
+        <div class="box bg-red">docker compose<br>stop rabbitmq</div><span class="arrow" style="color:var(--line)">➜</span>
+        <div class="box bg-red">10× POST /orders<br>→ 500</div><span class="arrow" style="color:var(--line)">➜</span>
+        <div class="box bg-purple">métrica de erros<br>sobe</div><span class="arrow" style="color:var(--line)">➜</span>
+        <div class="box bg-green">logs status:error<br>com a exceção AMQP</div><span class="arrow" style="color:var(--line)">➜</span>
+        <div class="box bg-amber">trace vermelho no<br>span amqp.command</div><span class="arrow" style="color:var(--line)">➜</span>
+        <div class="box bg-red">monitor → ALERT<br>e-mail chega</div><span class="arrow" style="color:var(--line)">➜</span>
+        <div class="box bg-green">start rabbitmq →<br>OK (recovery)</div>
+      </div>
+    </div>
+    <div class="callout ok"><span class="dot">✓</span><span><b>Checkpoint</b> &nbsp;E-mail de alerta recebido <b style="color:var(--ink)">e</b> e-mail de recovery. Feche com: “na Aula 9, se o RabbitMQ caísse às 3h da manhã, quem saberia? E agora?”</span></div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 18 · Exercícios -->
+<section class="slide">
+  <p class="kicker">Exercícios · durante a prática</p>
+  <h2>Para ela fazer sozinha</h2>
+  <div class="body cols cols-2" style="grid-auto-rows:min-content;align-content:start">
+    <div class="card"><div class="head-num"><span class="num">1</span><h3>Achar o gargalo</h3></div><p>No trace do POST /orders, qual span leva mais tempo — o INSERT no Postgres ou o publish no RabbitMQ? Anotar os ms.</p></div>
+    <div class="card"><div class="head-num"><span class="num">2</span><h3>Cache visível</h3></div><p>Com o tracer no restaurant-service, chamar GET /restaurants/1 duas vezes. O 2º trace tem span postgresql.query? (Aula 2/4 vista de dentro.)</p></div>
+    <div class="card"><div class="head-num"><span class="num">3</span><h3>Filtro de log</h3></div><p>Query no Logs Explorer: só erros do order-service nos últimos 15 min. Salvar como Saved View.</p></div>
+    <div class="card"><div class="head-num"><span class="num">4</span><h3>Dashboard RED</h3></div><p>3 widgets para order-service: requests/s, error rate, latência p95. Um 4º com orders.created por restaurant_id.</p></div>
+    <div class="card"><div class="head-num"><span class="num">5</span><h3>Cardinalidade (discussão)</h3></div><p>Por que <b>não</b> colocar customer_id como tag de orders.created? Onde esse dado deveria ficar? → log/trace.</p></div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 19 · Seção -->
+<section class="slide dark">
+  <div style="margin-top:200px">
+    <p class="kicker">Parte 3 · 20 min</p>
+    <h1 style="font-size:64px">Fechamento.</h1>
+    <p class="lead" style="font-size:20px">Ela verbaliza, você não aceita “sim/não”. Depois: tarefa da semana, rubrica e a ponte para a próxima aula.</p>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 20 · Perguntas -->
+<section class="slide">
+  <p class="kicker">Fechamento</p>
+  <h2>Perguntas para ela verbalizar</h2>
+  <div class="body" style="display:grid;grid-template-columns:1.3fr 1fr;gap:32px">
+    <ol class="steps" style="font-size:19px">
+      <li>Qual pergunta cada pilar responde? Um exemplo de cada com o food-delivery.</li>
+      <li>O que é trace_id e por que ele está no log?</li>
+      <li>O que o Agent faz e por que só ele conhece a API key?</li>
+      <li>O que muda num incidente às 3h da manhã com e sem monitor?</li>
+      <li>Por que order_id não pode ser tag de métrica?</li>
+    </ol>
+    <div style="background:var(--navy);color:#fff;border-radius:10px;padding:24px 26px">
+      <p class="label" style="color:var(--purple-soft)">Próxima aula — escolher com ela</p>
+      <div class="stack" style="gap:18px;margin-top:14px">
+        <div><div style="font:600 18px var(--display)">SLOs e error budget</div><div style="color:var(--on-dark-2);font-size:15px">sobre o POST /orders — continua direto daqui.</div></div>
+        <div><div style="font:600 18px var(--display)">Testcontainers</div><div style="color:var(--on-dark-2);font-size:15px">testes de integração; gancho já existe no roteiro.</div></div>
+        <div><div style="font:600 18px var(--display)">AWS: ECS + Agent sidecar</div><div style="color:var(--on-dark-2);font-size:15px">levar a stack para a cloud — ela tem conta AWS.</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 21 · Tarefa -->
+<section class="slide">
+  <p class="kicker">Tarefa da semana</p>
+  <h2>Entregável e critérios</h2>
+  <div class="body" style="display:grid;grid-template-columns:1.2fr 1fr;gap:32px">
+    <div class="stack">
+      <ol class="steps" style="font-size:16px">
+        <li>Instrumentar o payment-service com o tracer <b>e</b> uma métrica payments.declined (contador, tag reason). Gancho: a Aula 6 já recusa amountCents &lt;= 0.</li>
+        <li>Monitor de <b>log</b>: mais de 3 status:error em payment-service em 5 min.</li>
+        <li>Simular um incidente (derrubar orders-db), deixar o monitor disparar, corrigir, e escrever um mini post-mortem (≤ 1 página): o que quebrou, como o Datadog mostrou, tempo até detectar, tempo até resolver, o que faria diferente.</li>
+        <li>Mudar DD_VERSION para v3, republicar (fluxo da Aula 10) e comparar latência v2 × v3 no APM (Deployment Tracking).</li>
+      </ol>
+      <p style="margin:0;font-size:14px;color:var(--muted);font-style:italic">Entregável: branch com Dockerfile, override, OrderMetrics e PaymentMetrics + prints (trace distribuído, Service Map, dashboard RED, e-mail de alerta) + post-mortem.</p>
+    </div>
+    <table class="rubric">
+      <thead><tr><th>Critério</th><th>Peso</th></tr></thead>
+      <tbody>
+        <tr><td>Agent sobe; logs + traces + métricas chegam com env/service/version corretos</td><td>25%</td></tr>
+        <tr><td>Trace distribuído atravessando a fila (≥ 2 serviços no mesmo trace)</td><td>25%</td></tr>
+        <tr><td>Métrica custom com cardinalidade adequada + dashboard RED</td><td>20%</td></tr>
+        <tr><td>Monitor que dispara e recupera; post-mortem com tempos de detecção/resolução</td><td>30%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 22 · Armadilhas -->
+<section class="slide">
+  <p class="kicker">Antes da aula</p>
+  <h2>Armadilhas — leia antes de começar</h2>
+  <div class="body cols cols-4" style="grid-template-rows:1fr 1fr;gap:18px">
+    <div class="card warm"><h3 style="font-size:16px">DD_SITE errado</h3><p style="font-size:14px">Agent diz “API Key invalid” ou os dados somem. Conferir na URL da conta.</p></div>
+    <div class="card warm"><h3 style="font-size:16px">API key no Git</h3><p style="font-size:14px">Só no .env; .env no .gitignore. Se vazar, revogar na hora.</p></div>
+    <div class="card warm"><h3 style="font-size:16px">Custo</h3><p style="font-size:14px">Trial é grátis, mas Datadog cobra por host/container e GB de log. docker compose down no fim; não cadastrar cartão.</p></div>
+    <div class="card warm"><h3 style="font-size:16px">-javaagent depois do -jar</h3><p style="font-size:14px">Não funciona. Tem que vir antes, como opção da JVM.</p></div>
+    <div class="card warm"><h3 style="font-size:16px">Logs multi-linha</h3><p style="font-size:14px">Sem JSON o stacktrace vira 40 logs. Ligar logging.structured.format.console.</p></div>
+    <div class="card warm"><h3 style="font-size:16px">Boot 4 recente</h3><p style="font-size:14px">Testar o tracer nos serviços antes; Plano B (OTLP) pronto.</p></div>
+    <div class="card warm"><h3 style="font-size:16px">Docker Desktop no Mac</h3><p style="font-size:14px">Agent precisa do docker.sock montado; 7.61+ pode pedir pid: host (o override já faz).</p></div>
+    <div class="card warm"><h3 style="font-size:16px">Cardinalidade</h3><p style="font-size:14px">Excesso de tags faz a conta explodir. Métrica = poucas dimensões.</p></div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+<!-- 23 · Encerramento -->
+<section class="slide dark">
+  <div style="margin-top:110px">
+    <p class="kicker">Para levar</p>
+    <h1 style="font-size:44px;max-width:22ch">“Se para responder você precisa entrar no container, o sistema não é observável.”</h1>
+    <p class="lead" style="font-size:19px;margin-top:26px;max-width:70ch">Métricas dizem quanto. Logs dizem o quê. Traces dizem onde. Tags e trace_id fazem os três virarem uma resposta só — e o monitor faz alguém acordar às 3h.</p>
+    <p class="label" style="color:var(--purple-soft);margin-top:40px">Referências</p>
+    <div style="font-size:14px;color:var(--on-dark-3);line-height:1.7">
+      <a style="color:inherit" href="https://docs.datadoghq.com/containers/guide/compose-and-the-datadog-agent/">docs.datadoghq.com/containers/guide/compose-and-the-datadog-agent</a><br>
+      <a style="color:inherit" href="https://docs.datadoghq.com/tracing/trace_collection/dd_libraries/java/">docs.datadoghq.com/tracing/trace_collection/dd_libraries/java</a><br>
+      <a style="color:inherit" href="https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest_in_the_agent/">docs.datadoghq.com/opentelemetry/setup/otlp_ingest_in_the_agent</a> · <a style="color:inherit" href="https://github.com/DataDog/java-dogstatsd-client">github.com/DataDog/java-dogstatsd-client</a>
+    </div>
+  </div>
+  <div class="foot"><span>Aula 11 — Observabilidade com Datadog — Beatriz</span><span class="pg"></span></div>
+</section>
+
+</div>
+</div>
+
+<aside id="notes" hidden aria-live="polite"><p class="label">Notas do apresentador</p><div id="notes-body"></div></aside>
+<div id="help">← → navegar · N notas · F tela cheia · Ctrl+P imprime um slide por página</div>
+<nav id="hud" aria-label="Navegação dos slides">
+  <button id="prev" type="button" aria-label="Slide anterior">◀</button>
+  <span class="count" id="count">1 / 23</span>
+  <button id="next" type="button" aria-label="Próximo slide">▶</button>
+  <button id="notes-btn" type="button">Notas</button>
+  <button id="fs-btn" type="button">Tela cheia</button>
+</nav>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total = slides.length, cur = 0;
+  var stage = document.getElementById('stage'), viewport = document.getElementById('viewport');
+  var count = document.getElementById('count'), progress = document.getElementById('progress');
+  var notes = document.getElementById('notes'), notesBody = document.getElementById('notes-body');
+
+  slides.forEach(function (s, i) { var pg = s.querySelector('.pg'); if (pg) pg.textContent = (i + 1) + ' / ' + total; });
+
+  function fit() {
+    var w = viewport.clientWidth - 32, h = viewport.clientHeight - 80;
+    var k = Math.min(w / 1280, h / 720);
+    stage.style.transform = 'scale(' + k + ')';
+  }
+  function show(i, push) {
+    cur = Math.max(0, Math.min(total - 1, i));
+    slides.forEach(function (s, j) { s.classList.toggle('is-active', j === cur); });
+    count.textContent = (cur + 1) + ' / ' + total;
+    progress.style.width = ((cur + 1) / total * 100) + '%';
+    var n = slides[cur].getAttribute('data-notes');
+    notesBody.textContent = n || 'Sem notas para este slide.';
+    if (push !== false) { try { history.replaceState(null, '', '#' + (cur + 1)); } catch (e) {} }
+  }
+  function fromHash() { var n = parseInt(location.hash.slice(1), 10); return isNaN(n) ? 0 : n - 1; }
+
+  document.getElementById('prev').addEventListener('click', function () { show(cur - 1); });
+  document.getElementById('next').addEventListener('click', function () { show(cur + 1); });
+  document.getElementById('notes-btn').addEventListener('click', function () { notes.hidden = !notes.hidden; });
+  document.getElementById('fs-btn').addEventListener('click', function () {
+    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.target && /input|textarea/i.test(e.target.tagName)) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { show(cur + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { show(cur - 1); e.preventDefault(); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(total - 1);
+    else if (e.key === 'n' || e.key === 'N') notes.hidden = !notes.hidden;
+    else if (e.key === 'f' || e.key === 'F') document.getElementById('fs-btn').click();
+  });
+  var tx = null;
+  stage.addEventListener('touchstart', function (e) { tx = e.touches[0].clientX; }, { passive: true });
+  stage.addEventListener('touchend', function (e) {
+    if (tx === null) return; var dx = e.changedTouches[0].clientX - tx; tx = null;
+    if (Math.abs(dx) > 40) show(cur + (dx < 0 ? 1 : -1));
+  });
+  window.addEventListener('hashchange', function () { show(fromHash(), false); });
+  window.addEventListener('resize', fit);
+  window.addEventListener('beforeprint', function () { slides.forEach(function (s) { s.classList.add('is-active'); }); });
+  window.addEventListener('afterprint', function () { show(cur, false); });
+  fit(); show(fromHash(), false);
+})();
+</script>
+
+</body>
+</html>

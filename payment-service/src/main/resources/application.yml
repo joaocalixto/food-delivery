@@ -1,0 +1,27 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: payment-service
+
+demo:
+  payment:
+    slow-delay-ms: ${PAYMENT_SLOW_DELAY_MS:2500}
+
+logging:
+  structured:
+    format:
+      console: logstash
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+      cors:
+        allowed-origins: "*"
+        allowed-methods: GET
+  endpoint:
+    health:
+      show-details: always

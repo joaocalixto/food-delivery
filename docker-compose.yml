@@ -1,0 +1,155 @@
+# Sobe toda a stack e junta os componentes numa rede so.
+# Uso:  docker compose up --build
+#
+# Portas no host:
+#   8080  api-gateway (porta de entrada unica)
+#   8081  order-service        8082  restaurant-service     8083  order-processor
+#   8084  user-service         8085  payment-service        8086  delivery-service
+#   8087  notification-service 8090  dashboard
+#   15672 RabbitMQ UI (guest/guest)   9001 MinIO console (minioadmin/minioadmin)
+#
+# Atencao: a stack completa sobe ~15 containers. Em maquinas modestas, comente
+# os servicos que nao for usar (ex.: deixe so gateway + order + restaurant + infra).
+
+services:
+  # ---------- Infra ----------
+  restaurant-db:
+    image: postgres:16
+    environment: { POSTGRES_DB: restaurants, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  orders-db:
+    image: postgres:16
+    environment: { POSTGRES_DB: orders, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  users-db:
+    image: postgres:16
+    environment: { POSTGRES_DB: users, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+    ports: ["5434:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports: ["5672:5672", "15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Bucket de imagens (S3 compativel) para as fotos dos pratos
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment: { MINIO_ROOT_USER: minioadmin, MINIO_ROOT_PASSWORD: minioadmin }
+    ports: ["9000:9000", "9001:9001"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Porta de entrada ----------
+  api-gateway:
+    build: { context: ., dockerfile: api-gateway/Dockerfile }
+    image: api-gateway:latest
+    ports: ["8080:8080"]
+    depends_on: [restaurant-service, order-service, user-service, payment-service, delivery-service]
+
+  # ---------- Microservicos ----------
+  restaurant-service:
+    build: { context: ., dockerfile: restaurant-service/Dockerfile }
+    image: restaurant-service:latest
+    ports: ["8082:8082"]
+    environment:
+      DB_HOST: restaurant-db
+      DB_NAME: restaurants
+      REDIS_HOST: redis
+    depends_on:
+      restaurant-db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  order-service:
+    build: { context: ., dockerfile: order-service/Dockerfile }
+    image: order-service:latest
+    ports: ["8081:8081"]
+    environment:
+      DB_HOST: orders-db
+      DB_NAME: orders
+      RABBITMQ_HOST: rabbitmq
+    depends_on:
+      orders-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  order-processor:
+    build: { context: ., dockerfile: order-processor/Dockerfile }
+    image: order-processor:latest
+    ports: ["8083:8083"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+
+  user-service:
+    build: { context: ., dockerfile: user-service/Dockerfile }
+    image: user-service:latest
+    ports: ["8084:8084"]
+    environment:
+      DB_HOST: users-db
+      DB_NAME: users
+    depends_on:
+      users-db: { condition: service_healthy }
+
+  payment-service:
+    build: { context: ., dockerfile: payment-service/Dockerfile }
+    image: payment-service:latest
+    ports: ["8085:8085"]
+
+  delivery-service:
+    build: { context: ., dockerfile: delivery-service/Dockerfile }
+    image: delivery-service:latest
+    ports: ["8086:8086"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+
+  notification-service:
+    build: { context: ., dockerfile: notification-service/Dockerfile }
+    image: notification-service:latest
+    ports: ["8087:8087"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+
+  # ---------- Visualizacao ----------
+  dashboard:
+    image: nginx:alpine
+    ports: ["8090:80"]
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+      - ./dashboard/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [api-gateway, order-service, restaurant-service, order-processor, user-service, payment-service, delivery-service, notification-service]

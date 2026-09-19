@@ -1,0 +1,38 @@
+# PLANO B da Aula 11 (Passo 4): se o dd-java-agent nao gerar spans no Spring Boot 4.1,
+# use o OpenTelemetry nativo do Boot 4 e mande os traces para o MESMO Agent (porta 4318,
+# que o docker-compose.datadog.yml ja abre via DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT).
+#
+# 1) Dependencia (pom.xml do servico) — starter oficial do Boot 4, traz micrometer-tracing-bridge-otel
+#    e micrometer-registry-otlp:
+#
+#    <dependency>
+#      <groupId>org.springframework.boot</groupId>
+#      <artifactId>spring-boot-starter-opentelemetry</artifactId>
+#    </dependency>
+#
+# 2) Trecho para o application.yml (o host "datadog-agent" e o nome do servico no compose):
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0                         # aula: 100%. Producao: 0.1 ou menos.
+  opentelemetry:
+    resource-attributes:
+      service.name: ${DD_SERVICE:order-service}  # vira "service" no Datadog
+      deployment.environment: ${DD_ENV:aula}     # vira "env"
+      service.version: ${DD_VERSION:dev}         # vira "version"
+    tracing:
+      export:
+        otlp:
+          endpoint: http://${DD_AGENT_HOST:localhost}:4318/v1/traces
+
+# 3) Remova o "-javaagent:/app/dd-java-agent.jar" do ENTRYPOINT desse servico — nao misture
+#    os dois tracers no mesmo processo.
+#
+# O que muda em relacao ao Plano A (dd-java-agent):
+#  - Spans HTTP/JDBC/AMQP continuam aparecendo (Micrometer Observation instrumenta Spring MVC,
+#    RestClient, Spring AMQP; JDBC precisa de datasource-micrometer se quiser spans de query).
+#  - O trace_id no log vem no pattern padrao do Boot ("[app,traceId,spanId]") e nao como
+#    dd.trace_id no JSON. Para correlacionar log <-> trace no Datadog, crie um Log Pipeline com
+#    um Trace Id Remapper apontando para o atributo do traceId (ou use logging.structured + MDC).
+#  - Comparacao boa para discutir em aula: "agente automatico" x "OpenTelemetry (padrao aberto)".

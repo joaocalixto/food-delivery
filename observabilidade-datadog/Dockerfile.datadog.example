@@ -1,0 +1,28 @@
+# order-service/Dockerfile com o tracer do Datadog (APM).
+# Diferenca para o Dockerfile da Aula 1: as duas linhas marcadas com  # <-- DD
+#
+# Build context = raiz do monorepo (food-delivery/)
+# Build:  docker build -f order-service/Dockerfile -t order-service .
+
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /app
+COPY . .
+RUN mvn -q -pl order-service -am clean package -DskipTests
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /app/order-service/target/order-service-*.jar app.jar
+
+# <-- DD (1/2): tracer Java do Datadog (instrumentacao automatica: HTTP, JDBC, Redis, AMQP...)
+# Para fixar uma versao major: https://dtdg.co/java-tracer-v1
+# (Dockerfile nao aceita comentario na mesma linha da instrucao — por isso ficam acima)
+ADD https://dtdg.co/latest-java-tracer dd-java-agent.jar
+
+EXPOSE 8081
+
+# <-- DD (2/2): -javaagent TEM que vir antes de -jar (e opcao da JVM, nao argumento do app).
+# DD_SERVICE / DD_ENV / DD_VERSION / DD_AGENT_HOST vem do compose (docker-compose.datadog.yml).
+ENTRYPOINT ["java", "-javaagent:/app/dd-java-agent.jar", "-jar", "app.jar"]
+
+# Repita o mesmo par de linhas em order-processor/, delivery-service/, notification-service/,
+# restaurant-service/, payment-service/, user-service/ e api-gateway/ (trocando a porta).

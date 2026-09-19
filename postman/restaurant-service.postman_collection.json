@@ -1,0 +1,102 @@
+{
+  "info": {
+    "name": "Restaurant Service - Aula Beatriz",
+    "description": "Testa os endpoints do restaurant-service direto na porta 8082 (sem o gateway). Variáveis: baseUrl, restaurantId. O 'Create restaurant' salva o id criado em restaurantId automaticamente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8082", "type": "string" },
+    { "key": "restaurantId", "value": "1", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "List restaurants",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.code === 200);",
+              "pm.test('retorna uma lista', () => Array.isArray(pm.response.json()));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/restaurants", "host": ["{{baseUrl}}"], "path": ["restaurants"] }
+      }
+    },
+    {
+      "name": "Search by cuisine",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/restaurants?cuisine=Italiana",
+          "host": ["{{baseUrl}}"],
+          "path": ["restaurants"],
+          "query": [ { "key": "cuisine", "value": "Italiana" } ]
+        }
+      }
+    },
+    {
+      "name": "Search by name",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/restaurants?name=Sakura",
+          "host": ["{{baseUrl}}"],
+          "path": ["restaurants"],
+          "query": [ { "key": "name", "value": "Sakura" } ]
+        }
+      }
+    },
+    {
+      "name": "Get restaurant by id",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/restaurants/{{restaurantId}}", "host": ["{{baseUrl}}"], "path": ["restaurants", "{{restaurantId}}"] }
+      }
+    },
+    {
+      "name": "Get menu",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/restaurants/{{restaurantId}}/menu", "host": ["{{baseUrl}}"], "path": ["restaurants", "{{restaurantId}}", "menu"] }
+      }
+    },
+    {
+      "name": "Create restaurant",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.code === 200);",
+              "const b = pm.response.json();",
+              "if (b.id) { pm.collectionVariables.set('restaurantId', b.id); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "url": { "raw": "{{baseUrl}}/restaurants", "host": ["{{baseUrl}}"], "path": ["restaurants"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Cantina da Bia\",\n  \"cuisine\": \"Italiana\",\n  \"address\": \"Rua A, 100\",\n  \"menu\": [\n    { \"name\": \"Lasanha\", \"description\": \"Bolonhesa\", \"priceCents\": 5200, \"available\": true }\n  ]\n}"
+        }
+      }
+    },
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/actuator/health", "host": ["{{baseUrl}}"], "path": ["actuator", "health"] }
+      }
+    }
+  ]
+}

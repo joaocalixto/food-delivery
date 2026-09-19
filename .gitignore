@@ -1,0 +1,14 @@
+# Segredos (Aula 11): a API key do Datadog vive so aqui, nunca no Git
+.env
+
+# Build
+target/
+*.log
+observabilidade-datadog/dd-java-agent.jar
+observabilidade-datadog/dd-java-agent.jar.part
+
+# IDE / SO
+.idea/
+*.iml
+.vscode/
+.DS_Store

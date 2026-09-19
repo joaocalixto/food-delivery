@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Food Delivery — Componentes</title>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --border: #2a2e3a;
+    --text: #e6e7ea; --muted: #9aa0ad;
+    --up: #3fb950; --down: #f85149; --unknown: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px; background: var(--bg); color: var(--text);
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; transition: border-color .2s;
+  }
+  .card.up { border-color: rgba(63,185,80,.5); }
+  .card.down { border-color: rgba(248,81,73,.5); }
+  .card-head { display: flex; align-items: center; justify-content: space-between; }
+  .name { font-weight: 600; font-size: 15px; }
+  .port { color: var(--muted); font-size: 12px; font-weight: 400; }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; letter-spacing: .5px; }
+  .badge.up { background: rgba(63,185,80,.15); color: var(--up); }
+  .badge.down { background: rgba(248,81,73,.15); color: var(--down); }
+  .badge.unknown { background: rgba(210,153,34,.15); color: var(--unknown); }
+  .role { color: var(--muted); font-size: 12px; margin: 8px 0 12px; }
+  .deps { display: flex; flex-direction: column; gap: 6px; }
+  .dep { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .dot.up { background: var(--up); } .dot.down { background: var(--down); } .dot.unknown { background: var(--unknown); }
+  .foot { margin-top: 24px; color: var(--muted); font-size: 12px; }
+  .lab { margin: 0 0 24px; padding: 20px; border-radius: 12px; border: 1px solid #4355b9;
+    background: linear-gradient(135deg, #171b31, #1a1d27); }
+  .lab h2 { margin: 0 0 6px; font-size: 18px; }
+  .lab p { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  button.scenario { border: 0; border-radius: 8px; padding: 10px 14px; color: white;
+    background: #3b55d9; cursor: pointer; font-weight: 700; }
+  button.scenario.slow { background: #b7791f; }
+  button.scenario.error { background: #c53030; }
+  button.scenario:disabled { opacity: .55; cursor: wait; }
+  #result { margin-top: 14px; padding: 12px; border-radius: 8px; background: #0f1117;
+    min-height: 44px; white-space: pre-wrap; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--up); margin-right: 6px;
+    animation: p 1.6s infinite; } @keyframes p { 0%,100%{opacity:.3} 50%{opacity:1} }
+</style>
+</head>
+<body>
+  <h1>Food Delivery — Status dos Componentes</h1>
+  <div class="sub"><span class="pulse"></span>Atualiza a cada 3s lendo <code>/actuator/health</code> de cada serviço</div>
+  <section class="lab">
+    <h2>Laboratório de incidente</h2>
+    <p>Os três botões executam o mesmo pedido. Só o comportamento do pagamento muda. Compare latência, erro, trace e logs no Datadog.</p>
+    <div class="actions">
+      <button class="scenario" data-scenario="NORMAL">Pedido normal</button>
+      <button class="scenario slow" data-scenario="SLOW">Pagamento lento (~2,5 s)</button>
+      <button class="scenario error" data-scenario="ERROR">Pagamento com erro (503)</button>
+    </div>
+    <div id="result">Escolha um cenário para gerar tráfego.</div>
+  </section>
+  <div class="grid" id="grid"></div>
+  <div class="foot" id="foot">Carregando…</div>
+
+<script>
+  // Cada serviço Spring e suas dependências esperadas.
+  const SERVICES = [
+    { key: "api-gateway",         name: "API Gateway",          port: 8080, role: "Porta de entrada única",            deps: [] },
+    { key: "order-service",       name: "Order Service (API)",  port: 8081, role: "Recebe pedidos e publica na fila",  deps: ["db", "rabbit"] },
+    { key: "order-processor",     name: "Order Processor",      port: 8083, role: "Consome a fila e processa",         deps: ["rabbit"] },
+    { key: "restaurant-service",  name: "Restaurant Service",   port: 8082, role: "Catálogo e cardápios",              deps: ["db", "redis"] },
+    { key: "user-service",        name: "User Service",         port: 8084, role: "Cadastro, login e perfis",          deps: ["db"] },
+    { key: "payment-service",     name: "Payment Service",      port: 8085, role: "Processa pagamentos",               deps: [] },
+    { key: "delivery-service",    name: "Delivery Service",     port: 8086, role: "Atribui entregadores",              deps: ["rabbit"] },
+    { key: "notification-service",name: "Notification Service", port: 8087, role: "Envia notificações",               deps: ["rabbit"] },
+  ];
+  const DEP_LABEL = { db: "Postgres", redis: "Redis", rabbit: "RabbitMQ" };
+
+  async function runScenario(scenario) {
+    const result = document.getElementById("result");
+    const buttons = [...document.querySelectorAll("button.scenario")];
+    buttons.forEach(button => button.disabled = true);
+    const startedAt = performance.now();
+    result.textContent = `Executando ${scenario}...`;
+    try {
+      const orderResponse = await fetch("/lab/orders", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId: 1, restaurantId: 1,
+          items: [{ name: "Margherita", quantity: 2, priceCents: 4500 }] })
+      });
+      const order = await orderResponse.json();
+      if (!orderResponse.ok) throw new Error(`pedido HTTP ${orderResponse.status}: ${JSON.stringify(order)}`);
+
+      const paymentResponse = await fetch("/lab/payments", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, amountCents: order.totalCents, scenario })
+      });
+      const payment = await paymentResponse.json();
+      const elapsed = Math.round(performance.now() - startedAt);
+      result.textContent = [
+        `cenário: ${scenario}`,
+        `pedido: #${order.id}`,
+        `pagamento: ${payment.status} (HTTP ${paymentResponse.status})`,
+        `tempo visto pelo navegador: ${elapsed} ms`,
+        "Agora localize payment-service em APM → Services e abra o trace mais recente."
+      ].join("\n");
+    } catch (error) {
+      result.textContent = `Falha ao executar o laboratório: ${error.message}`;
+    } finally {
+      buttons.forEach(button => button.disabled = false);
+    }
+  }
+
+  document.querySelectorAll("button.scenario").forEach(button =>
+    button.addEventListener("click", () => runScenario(button.dataset.scenario)));
+
+  async function fetchHealth(svc) {
+    try {
+      const res = await fetch(`http://localhost:${svc.port}/actuator/health`, { cache: "no-store" });
+      const json = await res.json();
+      return { status: json.status, components: json.components || {} };
+    } catch (e) {
+      return { status: "DOWN", components: {}, unreachable: true };
+    }
+  }
+
+  function depStatus(components, dep) {
+    const c = components[dep];
+    if (!c) return "unknown";
+    return c.status === "UP" ? "up" : "down";
+  }
+
+  function render(results) {
+    const grid = document.getElementById("grid");
+    grid.innerHTML = "";
+    results.forEach((r, i) => {
+      const svc = SERVICES[i];
+      const up = r.status === "UP";
+      const cls = up ? "up" : "down";
+      const deps = svc.deps.map(d => {
+        const st = r.unreachable ? "unknown" : depStatus(r.components, d);
+        return `<div class="dep"><span class="dot ${st}"></span>${DEP_LABEL[d]}</div>`;
+      }).join("");
+      grid.innerHTML += `
+        <div class="card ${cls}">
+          <div class="card-head">
+            <div class="name">${svc.name} <span class="port">:${svc.port}</span></div>
+            <span class="badge ${up ? "up" : (r.unreachable ? "unknown" : "down")}">${r.unreachable ? "OFFLINE" : r.status}</span>
+          </div>
+          <div class="role">${svc.role}</div>
+          <div class="deps">${deps}</div>
+        </div>`;
+    });
+    document.getElementById("foot").textContent = "Última atualização: " + new Date().toLocaleTimeString("pt-BR");
+  }
+
+  async function tick() {
+    const results = await Promise.all(SERVICES.map(fetchHealth));
+    render(results);
+  }
+  tick();
+  setInterval(tick, 3000);
+</script>
+</body>
+</html>
