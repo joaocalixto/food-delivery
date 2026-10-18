@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Hook de pre-commit: roda o SonarQube e bloqueia o commit se houver issue HIGH/BLOCKER aberta.
+# Instalar (a partir de food-delivery/):  ln -sf ../../qualidade-sonarqube/pre-commit .git/hooks/pre-commit
+# Pular numa emergencia:                 git commit --no-verify
+# shortcut: analisa a arvore de trabalho, nao so o que esta staged; para isso, usar git stash -k antes.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+SONAR_URL="${SONAR_URL:-http://localhost:9100}"
+SONAR_TOKEN="${SONAR_TOKEN:-$(grep -E '^SONAR_TOKEN=' .env 2>/dev/null | cut -d= -f2- || true)}"
+
+echo "[pre-commit] Rodando analise do SonarQube..."
+if ! ./qualidade-sonarqube/analisar.sh >/tmp/sonar-pre-commit.log 2>&1; then
+  echo "[pre-commit] Analise falhou. Veja /tmp/sonar-pre-commit.log"
+  exit 1
+fi
+
+# O scanner so envia o relatorio; espera o servidor terminar de processar.
+task_id=$(grep -E '^ceTaskId=' target/sonar/report-task.txt | cut -d= -f2)
+for _ in $(seq 1 60); do
+  status=$(curl -sf -u "$SONAR_TOKEN:" "$SONAR_URL/api/ce/task?id=$task_id" \
+    | python3 -c 'import sys,json;print(json.load(sys.stdin)["task"]["status"])')
+  case "$status" in
+    SUCCESS) break ;;
+    FAILED|CANCELED) echo "[pre-commit] Processamento no SonarQube: $status"; exit 1 ;;
+  esac
+  sleep 2
+done
+if [ "$status" != SUCCESS ]; then
+  echo "[pre-commit] SonarQube nao terminou de processar em 2 min."
+  exit 1
+fi
+
+curl -sf -u "$SONAR_TOKEN:" \
+  "$SONAR_URL/api/issues/search?componentKeys=food-delivery&resolved=false&impactSeverities=HIGH,BLOCKER&ps=100" \
+| SONAR_URL="$SONAR_URL" python3 -c '
+import os, sys, json
+issues = json.load(sys.stdin)["issues"]
+if not issues:
+    print("[pre-commit] Nenhuma issue HIGH/BLOCKER. Commit liberado.")
+    sys.exit(0)
+print("[pre-commit] Commit BLOQUEADO: %d issue(s) HIGH/BLOCKER aberta(s):" % len(issues))
+for i in issues:
+    print("  %s:%s  %s  %s" % (i["component"].split(":")[-1], i.get("line", "-"), i["rule"], i["message"]))
+print("Detalhes: %s/project/issues?id=food-delivery&impactSeverities=HIGH,BLOCKER" % os.environ["SONAR_URL"])
+sys.exit(1)
+'

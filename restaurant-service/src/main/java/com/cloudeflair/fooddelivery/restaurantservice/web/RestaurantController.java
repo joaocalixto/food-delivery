@@ -3,6 +3,7 @@ package com.cloudeflair.fooddelivery.restaurantservice.web;
 import com.cloudeflair.fooddelivery.restaurantservice.domain.MenuItem;
 import com.cloudeflair.fooddelivery.restaurantservice.domain.Restaurant;
 import com.cloudeflair.fooddelivery.restaurantservice.service.RestaurantService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -49,8 +50,8 @@ public class RestaurantController {
     }
 
     @PostMapping
-    public ResponseEntity<Restaurant> create(@RequestBody Restaurant restaurant) {
-        Restaurant saved = service.save(restaurant);
+    public ResponseEntity<Restaurant> create(@Valid @RequestBody CreateRestaurantRequest request) {
+        Restaurant saved = service.save(new Restaurant(request.name(), request.cuisine(), request.address()));
         return ResponseEntity.ok(saved);
     }
 }
