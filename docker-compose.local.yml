@@ -1,0 +1,8 @@
+# Uso: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d restaurant-db redis
+# Depois rode o restaurant-service pela IDE ou com: mvn -pl restaurant-service spring-boot:run
+# abre as portas do banco e do Redis para o seu computador
+services:
+  restaurant-db:
+    ports: ["5432:5432"]
+  redis:
+    ports: ["6379:6379"]

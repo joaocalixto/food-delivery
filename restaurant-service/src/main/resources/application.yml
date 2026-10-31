@@ -25,6 +25,12 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+  # Servidor MCP: a IA descobre e chama as ferramentas em http://localhost:8082/mcp
+  ai:
+    mcp:
+      server:
+        protocol: STREAMABLE
+
 # Expoe o health para o dashboard de visualizacao dos componentes
 management:
   endpoints:
